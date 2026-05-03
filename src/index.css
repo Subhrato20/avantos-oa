@@ -1,0 +1,53 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Surfaces */
+  --app-bg: #eceff3;
+  --surface: #ffffff;
+  --sidebar-bg: #f6f7f9;
+  --sidebar-border: #e2e5eb;
+  /* Text */
+  --text: #1a1d24;
+  --text-secondary: #5c6370;
+  --text-muted: #8b939e;
+  /* Accent — deep blue (common admin UIs) */
+  --accent: #1e4db7;
+  --accent-hover: #153a8a;
+  --accent-surface: #e8eefb;
+  --accent-border: #c5d4f3;
+  /* Status */
+  --border: #e2e5eb;
+  --border-strong: #cfd4dc;
+  --danger: #c42b2b;
+  --danger-surface: #fef2f2;
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85em;
+}
