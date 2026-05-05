@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { saveNodeMapping } from "../api/saveNodeMapping";
 import { fromApiInputMapping } from "../prefill/inputMapping";
 import type { InputMappingState, PrefillBinding } from "../prefill/types";
 import type { ActionBlueprintGraph } from "../types/actionBlueprintGraph";
@@ -46,10 +47,11 @@ export function useMappings(graph: ActionBlueprintGraph | null): UseMappingsApi 
 
   const setBinding = useCallback(
     (formNodeId: string, fieldKey: string, binding: PrefillBinding) => {
-      setMappings((prev) => ({
-        ...prev,
-        [formNodeId]: { ...(prev[formNodeId] ?? {}), [fieldKey]: binding },
-      }));
+      setMappings((prev) => {
+        const next = { ...(prev[formNodeId] ?? {}), [fieldKey]: binding };
+        saveNodeMapping(formNodeId, next);
+        return { ...prev, [formNodeId]: next };
+      });
     },
     [],
   );
@@ -57,9 +59,10 @@ export function useMappings(graph: ActionBlueprintGraph | null): UseMappingsApi 
   const clearBinding = useCallback(
     (formNodeId: string, fieldKey: string) => {
       setMappings((prev) => {
-        const cur = { ...(prev[formNodeId] ?? {}) };
-        delete cur[fieldKey];
-        return { ...prev, [formNodeId]: cur };
+        const next = { ...(prev[formNodeId] ?? {}) };
+        delete next[fieldKey];
+        saveNodeMapping(formNodeId, next);
+        return { ...prev, [formNodeId]: next };
       });
     },
     [],
