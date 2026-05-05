@@ -11,12 +11,20 @@ vi.mock("../api/fetchBlueprintGraph", () => ({
 describe("useBlueprintGraph", () => {
   afterEach(() => fetchBlueprintGraph.mockReset());
 
-  it("starts in loading then resolves to ready with the graph", async () => {
-    fetchBlueprintGraph.mockResolvedValue(dagFixtureGraph);
+  it("starts in loading then resolves to ready with graph and etag", async () => {
+    fetchBlueprintGraph.mockResolvedValue({ graph: dagFixtureGraph, etag: '"abc"' });
     const { result } = renderHook(() => useBlueprintGraph());
     expect(result.current.status).toBe("loading");
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.graph).toBe(dagFixtureGraph);
+    expect(result.current.etag).toBe('"abc"');
+  });
+
+  it("exposes empty etag when server returns none (mock server)", async () => {
+    fetchBlueprintGraph.mockResolvedValue({ graph: dagFixtureGraph, etag: "" });
+    const { result } = renderHook(() => useBlueprintGraph());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.etag).toBe("");
   });
 
   it("transitions to error on rejection", async () => {

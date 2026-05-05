@@ -2,9 +2,7 @@ import type { ActionBlueprintGraph } from "../types/actionBlueprintGraph";
 
 function getBaseUrl(): string {
   const base = import.meta.env.VITE_GRAPH_API_BASE;
-  if (!base) {
-    throw new Error("Missing VITE_GRAPH_API_BASE");
-  }
+  if (!base) throw new Error("Missing VITE_GRAPH_API_BASE");
   return base.replace(/\/$/, "");
 }
 
@@ -21,25 +19,35 @@ function getBlueprintId(): string {
 }
 
 /**
- * GET /api/v1/{tenant}/actions/blueprints/{blueprintId}/graph
- * Matches mock server: https://github.com/mosaic-avantos/frontendchallengeserver
+ * Real API path: /api/v1/{tenant}/actions/blueprints/{blueprintId}/{versionId}/graph
+ * Mock server path (no versionId): /api/v1/{tenant}/actions/blueprints/{blueprintId}/graph
+ *
+ * When VITE_BLUEPRINT_VERSION_ID is set the version segment is included (real API).
+ * When absent the segment is omitted (mock server).
  */
 export function buildBlueprintGraphUrl(
   baseUrl = getBaseUrl(),
   tenantId = getTenantId(),
   blueprintId = getBlueprintId(),
+  versionId = import.meta.env.VITE_BLUEPRINT_VERSION_ID ?? "",
 ): string {
-  return `${baseUrl}/api/v1/${tenantId}/actions/blueprints/${blueprintId}/graph`;
+  const versionSegment = versionId ? `/${versionId}` : "";
+  return `${baseUrl}/api/v1/${tenantId}/actions/blueprints/${blueprintId}${versionSegment}/graph`;
+}
+
+export interface FetchBlueprintGraphResult {
+  graph: ActionBlueprintGraph;
+  /** ETag returned by the server — required for PUT (If-Match). Empty string when absent (mock server). */
+  etag: string;
 }
 
 function shouldUseLocalFallback(): boolean {
   return import.meta.env.DEV;
 }
 
-/** Served from `public/graph-mock.json` when API is unreachable (same payload as frontendchallengeserver). */
 async function fetchBundledGraphMock(
   signal?: AbortSignal,
-): Promise<ActionBlueprintGraph> {
+): Promise<FetchBlueprintGraphResult> {
   const base = import.meta.env.BASE_URL ?? "/";
   const path = `${base}graph-mock.json`.replace(/\/{2,}/g, "/");
   const res = await fetch(path, { signal });
@@ -48,7 +56,8 @@ async function fetchBundledGraphMock(
       `Local graph fallback failed (${res.status}). Ensure public/graph-mock.json exists.`,
     );
   }
-  return res.json() as Promise<ActionBlueprintGraph>;
+  const graph = (await res.json()) as ActionBlueprintGraph;
+  return { graph, etag: "" };
 }
 
 function isNetworkLikeError(err: unknown): boolean {
@@ -62,12 +71,14 @@ function isNetworkLikeError(err: unknown): boolean {
 
 export async function fetchBlueprintGraph(
   signal?: AbortSignal,
-): Promise<ActionBlueprintGraph> {
+): Promise<FetchBlueprintGraphResult> {
   const url = buildBlueprintGraphUrl();
   try {
     const res = await fetch(url, { signal });
     if (res.ok) {
-      return res.json() as Promise<ActionBlueprintGraph>;
+      const graph = (await res.json()) as ActionBlueprintGraph;
+      const etag = res.headers.get("ETag") ?? "";
+      return { graph, etag };
     }
     if (shouldUseLocalFallback()) {
       return fetchBundledGraphMock(signal);

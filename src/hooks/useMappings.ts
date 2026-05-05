@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { saveNodeMapping } from "../api/saveNodeMapping";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { saveBlueprintGraph } from "../api/saveBlueprintGraph";
 import { fromApiInputMapping } from "../prefill/inputMapping";
 import type { InputMappingState, PrefillBinding } from "../prefill/types";
 import type { ActionBlueprintGraph } from "../types/actionBlueprintGraph";
@@ -24,10 +24,16 @@ export interface UseMappingsApi {
 
 /**
  * Owns all per-form prefill mapping state. Initialized from the API payload
- * (plus optional demo seeding) and exposes minimal mutators so consumers
- * don't reach into the shape of `Record<formNodeId, InputMappingState>`.
+ * (plus optional demo seeding) and exposes minimal mutators.
+ *
+ * Every mutation fires a best-effort PUT to persist the full graph back to the
+ * server using the ETag captured at load time for optimistic concurrency.
+ * The mock server is read-only so this silently no-ops there.
  */
-export function useMappings(graph: ActionBlueprintGraph | null): UseMappingsApi {
+export function useMappings(
+  graph: ActionBlueprintGraph | null,
+  etag: string = "",
+): UseMappingsApi {
   const initial = useMemo(
     () => (graph ? initFromGraph(graph) : {}),
     [graph],
@@ -40,6 +46,12 @@ export function useMappings(graph: ActionBlueprintGraph | null): UseMappingsApi 
     setMappings(initial);
   }, [initial]);
 
+  // Keep a stable ref to the latest graph + etag so callbacks don't go stale.
+  const graphRef = useRef(graph);
+  const etagRef = useRef(etag);
+  graphRef.current = graph;
+  etagRef.current = etag;
+
   const getMapping = useCallback(
     (formNodeId: string) => mappings[formNodeId] ?? {},
     [mappings],
@@ -48,9 +60,14 @@ export function useMappings(graph: ActionBlueprintGraph | null): UseMappingsApi 
   const setBinding = useCallback(
     (formNodeId: string, fieldKey: string, binding: PrefillBinding) => {
       setMappings((prev) => {
-        const next = { ...(prev[formNodeId] ?? {}), [fieldKey]: binding };
-        saveNodeMapping(formNodeId, next);
-        return { ...prev, [formNodeId]: next };
+        const next = {
+          ...prev,
+          [formNodeId]: { ...(prev[formNodeId] ?? {}), [fieldKey]: binding },
+        };
+        if (graphRef.current) {
+          saveBlueprintGraph(graphRef.current, next, etagRef.current);
+        }
+        return next;
       });
     },
     [],
@@ -59,10 +76,13 @@ export function useMappings(graph: ActionBlueprintGraph | null): UseMappingsApi 
   const clearBinding = useCallback(
     (formNodeId: string, fieldKey: string) => {
       setMappings((prev) => {
-        const next = { ...(prev[formNodeId] ?? {}) };
-        delete next[fieldKey];
-        saveNodeMapping(formNodeId, next);
-        return { ...prev, [formNodeId]: next };
+        const updated = { ...(prev[formNodeId] ?? {}) };
+        delete updated[fieldKey];
+        const next = { ...prev, [formNodeId]: updated };
+        if (graphRef.current) {
+          saveBlueprintGraph(graphRef.current, next, etagRef.current);
+        }
+        return next;
       });
     },
     [],

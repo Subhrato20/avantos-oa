@@ -12,7 +12,8 @@ import "./App.css";
 export default function App() {
   const graphState = useBlueprintGraph();
   const graph = graphState.graph;
-  const { getMapping, setBinding, clearBinding } = useMappings(graph);
+  const etag = graphState.status === "ready" ? graphState.etag : "";
+  const { getMapping, setBinding, clearBinding } = useMappings(graph, etag);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerFieldKey, setPickerFieldKey] = useState<string | null>(null);

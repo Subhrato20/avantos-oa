@@ -17,7 +17,7 @@ describe("App", () => {
   });
 
   it("loads graph and shows prefill for selected form", async () => {
-    fetchBlueprintGraph.mockResolvedValue(dagFixtureGraph);
+    fetchBlueprintGraph.mockResolvedValue({ graph: dagFixtureGraph, etag: "" });
     render(<App />);
 
     await waitFor(() => {
@@ -38,7 +38,7 @@ describe("App", () => {
   });
 
   it("sets and clears a prefill mapping via modal", async () => {
-    fetchBlueprintGraph.mockResolvedValue(dagFixtureGraph);
+    fetchBlueprintGraph.mockResolvedValue({ graph: dagFixtureGraph, etag: "" });
     render(<App />);
 
     await waitFor(() =>

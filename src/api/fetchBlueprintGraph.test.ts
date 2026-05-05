@@ -6,33 +6,53 @@ describe("fetchBlueprintGraph", () => {
     vi.restoreAllMocks();
   });
 
-  it("buildBlueprintGraphUrl joins path segments", () => {
-    const url = buildBlueprintGraphUrl(
-      "http://localhost:3000",
-      "tenant-1",
-      "bp_abc",
-    );
-    expect(url).toBe(
-      "http://localhost:3000/api/v1/tenant-1/actions/blueprints/bp_abc/graph",
-    );
+  describe("buildBlueprintGraphUrl", () => {
+    it("omits version segment when versionId is empty", () => {
+      const url = buildBlueprintGraphUrl("http://localhost:3000", "tenant-1", "bp_abc", "");
+      expect(url).toBe("http://localhost:3000/api/v1/tenant-1/actions/blueprints/bp_abc/graph");
+    });
+
+    it("includes version segment when versionId is provided", () => {
+      const url = buildBlueprintGraphUrl("http://localhost:3000", "tenant-1", "bp_abc", "bpv_xyz");
+      expect(url).toBe(
+        "http://localhost:3000/api/v1/tenant-1/actions/blueprints/bp_abc/bpv_xyz/graph",
+      );
+    });
   });
 
-  it("fetches JSON", async () => {
+  it("fetches JSON and captures ETag header", async () => {
     const payload = { id: "bp", tenant_id: "1", nodes: [], edges: [], forms: [], branches: [], triggers: [] };
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(payload),
+        headers: { get: (h: string) => (h === "ETag" ? '"abc123"' : null) },
       }),
     );
 
     const result = await fetchBlueprintGraph();
-    expect(result).toEqual(payload);
+    expect(result.graph).toEqual(payload);
+    expect(result.etag).toBe('"abc123"');
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:3000/api/v1/1/actions/blueprints/bp_test/graph",
       expect.any(Object),
     );
+  });
+
+  it("returns empty etag when server sends no ETag header", async () => {
+    const payload = { id: "bp", tenant_id: "1", nodes: [], edges: [], forms: [], branches: [], triggers: [] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(payload),
+        headers: { get: () => null },
+      }),
+    );
+
+    const result = await fetchBlueprintGraph();
+    expect(result.etag).toBe("");
   });
 
   it("in dev, falls back to bundled graph when API returns non-OK", async () => {
@@ -57,11 +77,13 @@ describe("fetchBlueprintGraph", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(fallback),
+          headers: { get: () => null },
         }),
     );
 
     const result = await fetchBlueprintGraph();
-    expect(result).toEqual(fallback);
+    expect(result.graph).toEqual(fallback);
+    expect(result.etag).toBe("");
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
   });
 
