@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildFormsById, buildNodesById } from "./api/mappers";
+import { DagView } from "./components/DagView";
 import { FormList } from "./components/FormList";
 import { PrefillModal } from "./components/PrefillModal";
 import { PrefillPanel } from "./components/PrefillPanel";
@@ -84,6 +85,11 @@ export default function App() {
           onSelect={setSelectedId}
         />
         <main className="app-main">
+          <DagView
+            nodes={graph.nodes}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
           <PrefillPanel
             targetNode={selectedNode}
             form={targetForm}

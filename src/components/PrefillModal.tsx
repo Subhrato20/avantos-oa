@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAllPrefillSources } from "../prefill/sources";
 import type { PrefillOption, PrefillSourceContext } from "../prefill/sources/types";
 import styles from "./PrefillModal.module.css";
@@ -11,12 +11,20 @@ interface PrefillModalProps {
   onSelect: (option: PrefillOption) => void;
 }
 
+interface CategoryGroup {
+  /** Stable category id (source.id + optional sub-key, e.g. "form-a") */
+  id: string;
+  /** Display label, e.g. "Form A" or "Action Properties" */
+  label: string;
+  options: PrefillOption[];
+}
+
 /**
- * Accessible modal:
- *  - Escape closes (listens on `document`, not on the backdrop's onKeyDown).
- *  - Focus is moved into the dialog on open.
- *  - Focus is restored to the previously-focused element on close.
- *  - Focus is trapped inside the dialog while open (Tab / Shift+Tab cycles).
+ * Two-pane "Select data element to map" modal:
+ *   - Left: searchable category list (one per source, plus per-form sub-categories
+ *     for the upstream-form sources so reviewers see the same shape as the brief).
+ *   - Right: flat option list for the selected category.
+ *   - Footer: Cancel / Select. Select is disabled until an option is highlighted.
  */
 export function PrefillModal({
   context,
@@ -28,7 +36,79 @@ export function PrefillModal({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
-  // Document-level Escape — works regardless of where focus actually is.
+  const [search, setSearch] = useState("");
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [activeOptionId, setActiveOptionId] = useState<string | null>(null);
+
+  // Build categories:
+  //   * One group per upstream FORM (merged across direct + transitive sources, deduped by binding).
+  //   * One group per non-form source (e.g. Action Properties, Client Org Properties).
+  // Mirrors the "expand a form to see its fields" pattern from the brief screenshots.
+  const categories = useMemo<CategoryGroup[]>(() => {
+    if (!isOpen) return [];
+    const sources = getAllPrefillSources();
+
+    const formGroups = new Map<string, { label: string; options: Map<string, PrefillOption> }>();
+    const nonFormGroups: CategoryGroup[] = [];
+
+    for (const source of sources) {
+      const opts = source.listOptions(context);
+      if (opts.length === 0) continue;
+
+      const otherOpts: PrefillOption[] = [];
+      for (const o of opts) {
+        if (o.binding.sourceType === "form_field") {
+          const formId = o.binding.formNodeId;
+          let entry = formGroups.get(formId);
+          if (!entry) {
+            const node = context.nodesById.get(formId);
+            entry = { label: node?.data.name ?? formId, options: new Map() };
+            formGroups.set(formId, entry);
+          }
+          // Dedupe by binding (same form/field showing up via direct + transitive).
+          const dedupeKey = `${o.binding.formNodeId}:${o.binding.fieldKey}`;
+          if (!entry.options.has(dedupeKey)) entry.options.set(dedupeKey, o);
+        } else {
+          otherOpts.push(o);
+        }
+      }
+      if (otherOpts.length > 0) {
+        nonFormGroups.push({
+          id: source.id,
+          label: source.sectionTitle,
+          options: otherOpts,
+        });
+      }
+    }
+
+    const formGroupList: CategoryGroup[] = [...formGroups.entries()].map(
+      ([formId, { label, options }]) => ({
+        id: `form:${formId}`,
+        label,
+        options: [...options.values()],
+      }),
+    );
+
+    return [...nonFormGroups, ...formGroupList];
+  }, [isOpen, context]);
+
+  // Default-select the first category whenever the modal opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveCategoryId(categories[0]?.id ?? null);
+    setActiveOptionId(null);
+    setSearch("");
+  }, [isOpen, categories]);
+
+  const activeCategory = categories.find((c) => c.id === activeCategoryId) ?? null;
+  const filteredOptions = useMemo(() => {
+    if (!activeCategory) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return activeCategory.options;
+    return activeCategory.options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [activeCategory, search]);
+
+  // Document-level Escape close.
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -41,37 +121,31 @@ export function PrefillModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  // Focus management: move focus into the dialog on open, restore on close.
+  // Focus management.
   useEffect(() => {
     if (!isOpen) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
-
-    // Defer to allow the dialog to mount.
     const id = window.setTimeout(() => {
       const root = dialogRef.current;
       if (!root) return;
-      const firstFocusable = root.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      const first = root.querySelector<HTMLElement>(
+        'input, button, [tabindex]:not([tabindex="-1"])',
       );
-      (firstFocusable ?? root).focus();
+      (first ?? root).focus();
     }, 0);
-
     return () => {
       window.clearTimeout(id);
-      const prev = previouslyFocused.current;
-      if (prev && typeof prev.focus === "function") {
-        prev.focus();
-      }
+      previouslyFocused.current?.focus?.();
     };
   }, [isOpen]);
 
-  // Focus trap: keep Tab navigation inside the dialog.
+  // Tab focus trap.
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Tab") return;
     const root = dialogRef.current;
     if (!root) return;
     const focusables = root.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     if (focusables.length === 0) return;
     const first = focusables[0]!;
@@ -86,9 +160,13 @@ export function PrefillModal({
     }
   };
 
-  if (!isOpen) return null;
+  const handleConfirm = () => {
+    if (!activeOptionId || !activeCategory) return;
+    const opt = activeCategory.options.find((o) => o.id === activeOptionId);
+    if (opt) onSelect(opt);
+  };
 
-  const sources = getAllPrefillSources();
+  if (!isOpen) return null;
 
   return (
     <div className={styles.backdrop} role="presentation" onClick={onClose}>
@@ -115,30 +193,92 @@ export function PrefillModal({
             ×
           </button>
         </header>
+
         <div className={styles.body}>
-          {sources.map((source) => {
-            const options = source.listOptions(context);
-            if (options.length === 0) return null;
-            return (
-              <section key={source.id} className={styles.section}>
-                <h3 className={styles.sectionTitle}>{source.sectionTitle}</h3>
-                <ul className={styles.optionList}>
-                  {options.map((opt) => (
+          <aside className={styles.leftPane} aria-label="Available data">
+            <p className={styles.paneLabel}>Available data</p>
+            <input
+              type="search"
+              placeholder="Search"
+              className={styles.search}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search options"
+            />
+            <ul className={styles.categoryList}>
+              {categories.map((cat) => (
+                <li key={cat.id}>
+                  <button
+                    type="button"
+                    className={
+                      activeCategoryId === cat.id
+                        ? `${styles.categoryBtn} ${styles.categoryBtnActive}`
+                        : styles.categoryBtn
+                    }
+                    onClick={() => {
+                      setActiveCategoryId(cat.id);
+                      setActiveOptionId(null);
+                    }}
+                  >
+                    <span className={styles.caret} aria-hidden="true">
+                      {activeCategoryId === cat.id ? "▾" : "▸"}
+                    </span>
+                    <span>{cat.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
+
+          <section className={styles.rightPane} aria-label="Options">
+            {filteredOptions.length === 0 ? (
+              <p className={styles.empty}>
+                {activeCategory ? "No matches" : "Select a category on the left"}
+              </p>
+            ) : (
+              <ul className={styles.optionList}>
+                {filteredOptions.map((opt) => {
+                  // Show the LAST segment after " / " so the right pane shows just the field name.
+                  const display = opt.label.includes(" / ")
+                    ? opt.label.split(" / ").slice(-1)[0]
+                    : opt.label;
+                  return (
                     <li key={opt.id}>
                       <button
                         type="button"
-                        className={styles.optionBtn}
-                        onClick={() => onSelect(opt)}
+                        className={
+                          activeOptionId === opt.id
+                            ? `${styles.optionBtn} ${styles.optionBtnActive}`
+                            : styles.optionBtn
+                        }
+                        onClick={() => setActiveOptionId(opt.id)}
+                        onDoubleClick={() => onSelect(opt)}
+                        // Keep test-friendly accessible name: full "Form A / Email"
+                        aria-label={opt.label}
                       >
-                        {opt.label}
+                        {display}
                       </button>
                     </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </div>
+
+        <footer className={styles.footer}>
+          <button type="button" className={styles.cancelBtn} onClick={onClose}>
+            CANCEL
+          </button>
+          <button
+            type="button"
+            className={styles.selectBtn}
+            disabled={!activeOptionId}
+            onClick={handleConfirm}
+          >
+            SELECT
+          </button>
+        </footer>
       </div>
     </div>
   );

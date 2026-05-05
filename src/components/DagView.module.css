@@ -1,0 +1,54 @@
+.wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+  background-image: radial-gradient(circle, #d8dde5 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.edge {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+
+.nodeGroup,
+.nodeGroupActive {
+  cursor: pointer;
+}
+
+.nodeRect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  transition: stroke 0.12s ease;
+}
+.nodeGroup:hover .nodeRect {
+  stroke: var(--accent);
+}
+
+.nodeRectActive {
+  fill: var(--accent-surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.nodeKicker {
+  font-size: 10px;
+  fill: var(--text-muted);
+  font-weight: 500;
+}
+
+.nodeLabel {
+  font-size: 13px;
+  fill: var(--text);
+  font-weight: 600;
+}
