@@ -27,6 +27,17 @@ describe("inputMapping adapters", () => {
     });
   });
 
+  it("ignores malformed bindings rather than crashing", () => {
+    const raw = {
+      ok: { sourceType: "global_property", propertyKey: "x" },
+      missingKey: { sourceType: "form_field", formNodeId: "n" }, // missing fieldKey
+      unknownType: { sourceType: "wat" },
+      notAnObject: "string",
+    };
+    const parsed = fromApiInputMapping(raw);
+    expect(Object.keys(parsed)).toEqual(["ok"]);
+  });
+
   it("round-trips through toApiInputMapping", () => {
     const state: Record<string, PrefillBinding> = {
       email: {
@@ -48,5 +59,21 @@ describe("inputMapping adapters", () => {
     };
     const s = formatBindingSummary(b, () => "Form A");
     expect(s).toBe("Form A / email");
+  });
+
+  it("formatBindingSummary uses the global label registry for known keys", () => {
+    const b: PrefillBinding = {
+      sourceType: "global_property",
+      propertyKey: "client.org_name",
+    };
+    expect(formatBindingSummary(b, () => "")).toBe("Client organization name");
+  });
+
+  it("formatBindingSummary falls back to the raw key for unknown globals", () => {
+    const b: PrefillBinding = {
+      sourceType: "global_property",
+      propertyKey: "unknown.key",
+    };
+    expect(formatBindingSummary(b, () => "")).toBe("unknown.key");
   });
 });

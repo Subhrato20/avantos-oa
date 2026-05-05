@@ -1,3 +1,4 @@
+import { globalLabelFor } from "./globals";
 import type { PrefillBinding, InputMappingState } from "./types";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -45,12 +46,17 @@ export function toApiInputMapping(state: InputMappingState): Record<string, unkn
   return out;
 }
 
+/**
+ * Human-friendly summary of a binding, used by the panel.
+ * - form_field: "Form Name / fieldKey"
+ * - global_property: human label from the globals registry, falling back to the key.
+ */
 export function formatBindingSummary(
   binding: PrefillBinding,
   resolveFormName: (formNodeId: string) => string,
 ): string {
   if (binding.sourceType === "global_property") {
-    return binding.propertyKey;
+    return globalLabelFor(binding.propertyKey);
   }
   const formName = resolveFormName(binding.formNodeId);
   return `${formName} / ${binding.fieldKey}`;

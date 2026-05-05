@@ -43,12 +43,14 @@ export const dagFixtureGraph: ActionBlueprintGraph = {
         type: "object",
         properties: {
           email: { avantos_type: "short-text", title: "Email", type: "string" },
+          name: { avantos_type: "short-text", title: "Name", type: "string" },
         },
       },
       ui_schema: {
         type: "VerticalLayout",
         elements: [
           { type: "Control", scope: "#/properties/email", label: "Email" },
+          { type: "Control", scope: "#/properties/name", label: "Full name" },
         ],
       },
     },
@@ -70,6 +72,7 @@ export const dagFixtureGraph: ActionBlueprintGraph = {
         type: "object",
         properties: {
           email: { avantos_type: "short-text", title: "Email", type: "string" },
+          submit: { avantos_type: "button", title: "Submit", type: "string" },
         },
       },
       ui_schema: { type: "VerticalLayout", elements: [] },
